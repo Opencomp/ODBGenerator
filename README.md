@@ -19,8 +19,8 @@ You need to define the address of the main Opencomp instance by filling ```apiUR
 
 | Parameter          | Description                                   |
 |--------------------|-----------------------------------------------|
-| __ apikey __       | User API Key needed to trigger Opencomp API   |
-| __ classroom_id__  | Opencomp ```classroom_id``` to retrieve       |
+| __apikey__         | User API Key needed to trigger Opencomp API   |
+| __classroom_id__   | Opencomp ```classroom_id``` to retrieve       |
 
 ##### Example call
 ```
@@ -31,8 +31,8 @@ http://localhost:8080/ODBGenerator/generateODB?apikey=6400711028fccfd416d7f0f783
 
 | HTTP Response                     | Description                                   |
 |-----------------------------------|-----------------------------------------------|
-| __ 200 - OK __                    | Your browser should prompt to download the generated .odb file                                                                 |
-| __ 405 - Method Not Allowed __    | You need to use GET method                    |
-| __ 412 - Precondition Failed __   | You need to supply all required parameters    |
-| __ 401 - Unauthorized __          | The supplied API Key is invalid or you do not have sufficient permission to retrieve this classroom associated data               |
-| __ 404 - Not Found __             | ```classroom_id``` you specified does not exist    |
+| __200 - OK__                    | Your browser should prompt to download the generated .odb file |
+| __405 - Method Not Allowed__    | You need to use GET method                      |
+| __412 - Precondition Failed__   | You need to supply all required parameters      |
+| __401 - Unauthorized__          | The supplied API Key is invalid or you do not have sufficient permission to retrieve this classroom associated data |
+| __404 - Not Found__             | ```classroom_id``` you specified does not exist |
