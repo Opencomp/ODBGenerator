@@ -2,6 +2,18 @@
     <wb-module deploy-name="ODBGenerator">
         <wb-resource deploy-path="/" source-path="/WebContent" tag="defaultRootSource"/>
         <wb-resource deploy-path="/WEB-INF/classes" source-path="/src"/>
+        <dependent-module archiveName="json-20090211.jar" deploy-path="/WEB-INF/lib" handle="module:/classpath/lib/ODBGenerator/lib/json-20090211.jar">
+            <dependency-type>uses</dependency-type>
+        </dependent-module>
+        <dependent-module archiveName="zip4j_1.3.2.jar" deploy-path="/WEB-INF/lib" handle="module:/classpath/lib/ODBGenerator/lib/zip4j_1.3.2.jar">
+            <dependency-type>uses</dependency-type>
+        </dependent-module>
+        <dependent-module archiveName="hsqldb.jar" deploy-path="/WEB-INF/lib" handle="module:/classpath/lib/ODBGenerator/lib/hsqldb.jar">
+            <dependency-type>uses</dependency-type>
+        </dependent-module>
+        <dependent-module archiveName="gson-2.3.1.jar" deploy-path="/WEB-INF/lib" handle="module:/classpath/lib/ODBGenerator/lib/gson-2.3.1.jar">
+            <dependency-type>uses</dependency-type>
+        </dependent-module>
         <property name="context-root" value="ODBGenerator"/>
         <property name="java-output-path" value="/ODBGenerator/build/classes"/>
     </wb-module>
