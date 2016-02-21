@@ -7,11 +7,13 @@ This servlet is used by Opencomp web application to provide a way to automatical
 
 Informations are retrieved via Opencomp API.
 
-You need to define the address of the main Opencomp instance by filling ```apiURl param-value``` into ```init-param``` section of ```web.xml``` file.
-
 ## Usage
 
-### /ODBGenerator/generateODB?```<params>```
+### Configure API Endpoint
+
+You need to define the address of the main Opencomp instance by filling ```apiURl param-value``` into ```init-param``` section of ```web.xml``` file.
+
+### Call servlet /ODBGenerator/generateODB?```<params>```
 
 #### GET parameters required
 
@@ -19,6 +21,11 @@ You need to define the address of the main Opencomp instance by filling ```apiUR
 |--------------------|-----------------------------------------------|
 | __ apikey __       | User API Key needed to trigger Opencomp API   |
 | __ classroom_id__  | Opencomp ```classroom_id``` to retrieve       |
+
+##### Example call
+```
+http://localhost:8080/ODBGenerator/generateODB?apikey=6400711028fccfd416d7f0f783f9edc28575fe214e5dc60cbe4f230c13cd9158&classroom_id=28
+```
 
 #### HTTP responses codes meaning
 
