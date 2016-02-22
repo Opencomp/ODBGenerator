@@ -1,6 +1,5 @@
 package Opencomp;
 
-import com.google.gson.Gson;
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.ZipParameters;
@@ -14,17 +13,30 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
+import java.net.URL;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import java.util.List;
+
 import org.hsqldb.jdbcDriver;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
 
-import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.sql.*;
-import java.util.List;
+import com.google.gson.Gson;
 
 class Pupil {
     String id;
@@ -39,13 +51,10 @@ class Classroom {
     List<Pupil> pupils;
 }
 
+@SuppressWarnings("serial")
 public class ServletGenerateODB extends HttpServlet {
 	String apiUrl;
-	
-    /**
-	 * 
-	 */
-	private static final long serialVersionUID = -1589756158656851734L;
+	String json;
 
 	public void init(ServletConfig config) throws ServletException {
 	    super.init(config);
@@ -53,7 +62,8 @@ public class ServletGenerateODB extends HttpServlet {
 	}
 	
 	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        //Only GET method is allowed
+		response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
     }
 
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -61,67 +71,85 @@ public class ServletGenerateODB extends HttpServlet {
         String classroom_id = request.getParameter("classroom_id");
 
         if(apikey == null || classroom_id == null){
+        	//Some required parameters are missing
             response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
             return;
         }
-
-        String json = readUrl(new URL(apiUrl + "/classrooms/getJson/" + apikey + "/" + classroom_id));
-
+       
+        json = readUrl(new URL(apiUrl + "/classrooms/getJson/" + apikey + "/" + classroom_id),response);
+        
+    	if(json.equals("504")){
+        	response.sendError(HttpServletResponse.SC_GATEWAY_TIMEOUT);
+        	return;
+        }
+      	
         if(isJSONValid(json)){
+        	
+        	//Parsing our JSON to the Classroom class
             Gson gson = new Gson();
             Classroom classroom = gson.fromJson(json, Classroom.class);
             
-            if(classroom.error.equals("INVALID_APIKEY")){
-            	response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
-            
-            if(classroom.error.equals("UNKNOWN_CLASSROOM")){
-            	response.sendError(HttpServletResponse.SC_NOT_FOUND);
-                return;
+            //If we have an error, let the user know (HTTP response code)
+            switch(classroom.error){
+            	case "INVALID_APIKEY":
+            		//Supplied API Key is invalid
+            		response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            		return;
+            	case "UNAUTHORIZED":
+            		//API Key is correct but insufficient permissions
+            		response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            		return;
+            	case "UNKNOWN_CLASSROOM":
+            		//Classroom does not exist for this classroom_id
+            		response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            		return;
             }
 
+            //Get servlet context (used to get path of Dynamic Web Project)
             ServletContext cntxt = this.getServletContext();
-
-            File dir = new File(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id);
-            try{
-            	deleteDir(dir);
-            	dir.mkdir();
-            }catch (Exception e){
-            	e.printStackTrace();
-            }
             
+            //Creating directory for associated classroom
+            String workdir = cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id;
+            File dir = new File(workdir);
+        	deleteDir(dir);
+        	dir.mkdir();
+        	
+        	//Unzipping files from ODB file into previously created directory
             try {
                 ZipFile zipFile = new ZipFile(cntxt.getRealPath("/WEB-INF/")+"/"+"master.odb");
-                zipFile.extractAll(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id);
+                zipFile.extractAll(workdir);
             } catch (ZipException e) {
                 e.printStackTrace();
             }
 
-            //On renomme les fichiers HSQLDB pour pouvoir les ouvrir hors de LibreOffice
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/backup",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.backup");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/data",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.data");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/properties",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.properties");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/script",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.script");
+            //Renaming HSQLDB files to be able to open them outside LibreOffice
+            renameFile(workdir+"/database/backup",workdir+"/database/db.backup");
+            renameFile(workdir+"/database/data",workdir+"/database/db.data");
+            renameFile(workdir+"/database/properties",workdir+"/database/db.properties");
+            renameFile(workdir+"/database/script",workdir+"/database/db.script");
 
             //Create our JDBC connection based on the temp filename used above
             Connection con = null; //Database objects
             Statement statement = null;
             new jdbcDriver(); //Instantiate the jdbcDriver from HSQL
             try {
-                con = DriverManager.getConnection("jdbc:hsqldb:file:" + cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/database/db;shutdown=true", "SA", "");
+                con = DriverManager.getConnection("jdbc:hsqldb:file:" + workdir + "/database/db;shutdown=true", "SA", "");
             } catch (SQLException e) {
                 e.printStackTrace();
             }
 
+            //Our master.odb file contain one record in our unique table.
+            //We need to do that, otherwise, data file is not create
             try {
             	int i = 1;
                 for (Pupil pupil : classroom.pupils)
                 {
                 	if(i == 1){
+                		//We update first line for first iteration
                 		statement = con.createStatement();
                         statement.executeUpdate("UPDATE \"Eleves\" SET \"Code\" = '"+pupil.id+"', \"Nom\" = '"+pupil.name+"', \"Prénom\" = '"+pupil.first_name+"', \"naiss\" = '"+pupil.birthday+"', \"level\" = '"+pupil.level+"' WHERE \"ID\" = 1");
                 	}else{
+                		//Adding the next records
                 		statement = con.createStatement();
                         statement.executeUpdate("INSERT INTO \"Eleves\" VALUES ('"+i+"', '"+pupil.id+"', '"+pupil.name+"', '"+pupil.first_name+"', '"+pupil.birthday+"', '"+pupil.level+"')");
                 	}
@@ -131,7 +159,6 @@ public class ServletGenerateODB extends HttpServlet {
                 e.printStackTrace();
             }
 
-
             //Close all the database objects
             try {
                 statement.close();
@@ -140,15 +167,15 @@ public class ServletGenerateODB extends HttpServlet {
                 e.printStackTrace();
             }
 
-            //On renomme les fichiers HSQLDB pour pouvoir les ouvrir dans LibreOffice
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.backup",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/backup");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.data",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/data");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.properties",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/properties");
-            renameFile(cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/db.script",cntxt.getRealPath("/WEB-INF/")+"/"+classroom_id+"/database/script");
+            //Renaming HSQLDB files to be able to open them in LibreOffice
+            renameFile(workdir+"/database/db.backup",workdir+"/database/backup");
+            renameFile(workdir+"/database/db.data",workdir+"/database/data");
+            renameFile(workdir+"/database/db.properties",workdir+"/database/properties");
+            renameFile(workdir+"/database/db.script",workdir+"/database/script");
 
             try {
                 // Initiate ZipFile object with the path/name of the zip file.
-                ZipFile zipFile = new ZipFile(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + ".odb");
+                ZipFile zipFile = new ZipFile(workdir + ".odb");
 
                 // Initiate Zip Parameters which define various properties such
                 // as compression method, etc.
@@ -161,39 +188,42 @@ public class ServletGenerateODB extends HttpServlet {
                 parameters.setCompressionLevel(Zip4jConstants.DEFLATE_LEVEL_NORMAL);
 
                 // Add folder to the zip file
-                zipFile.addFile(new File(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/mimetype"), parameters_mimetype);
-                zipFile.addFolder(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/Configurations2", parameters);
-                zipFile.addFile(new File(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/content.xml"), parameters);
-                zipFile.addFolder(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/database", parameters);
-                zipFile.addFolder(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/forms", parameters);
-                zipFile.addFolder(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/META-INF", parameters);
-                zipFile.addFolder(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/reports", parameters);
-                zipFile.addFile(new File(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id + "/settings.xml"), parameters);
+                zipFile.addFile(new File(workdir + "/mimetype"), parameters_mimetype);
+                zipFile.addFolder(workdir + "/Configurations2", parameters);
+                zipFile.addFile(new File(workdir + "/content.xml"), parameters);
+                zipFile.addFolder(workdir + "/database", parameters);
+                zipFile.addFolder(workdir + "/forms", parameters);
+                zipFile.addFolder(workdir + "/META-INF", parameters);
+                zipFile.addFolder(workdir + "/reports", parameters);
+                zipFile.addFile(new File(workdir + "/settings.xml"), parameters);
 
             } catch (ZipException e) {
                 e.printStackTrace();
             }
 
-            deleteDir(new File(cntxt.getRealPath("/WEB-INF/")+"/"+ classroom_id));
-
+            deleteDir(new File(workdir));
 
             response.setContentType("application/vnd.oasis.opendocument.database");
             response.setHeader("Content-Disposition", "filename=\""+classroom_id+".odb\"");
             String fName = "/WEB-INF/"+classroom_id+".odb";
             BufferedInputStream buf = new BufferedInputStream(cntxt.getResourceAsStream(fName));
 
-            //On renvoie le fichier .odb généré
+            //Returning ODB file
             ServletOutputStream myOut = response.getOutputStream();
             int readBytes;
 
-            //On lit depuis le fichier généré et on dirige la sortie vers la ServletOutputStream
+            //Reading from generated file and redirecting output to ServletOutputStream
             while ((readBytes = buf.read()) != -1) {
                 myOut.write(readBytes);
             }
+        }else{
+        	//Malformed JSON
+        	response.sendError(HttpServletResponse.SC_BAD_GATEWAY);
+    		return;
         }
     }
 
-    public static boolean isJSONValid(String test) {
+    private static boolean isJSONValid(String test) {
         try {
             new JSONObject(test);
         } catch (JSONException ex) {
@@ -206,31 +236,37 @@ public class ServletGenerateODB extends HttpServlet {
         return true;
     }
 
-    public static String readUrl(URL url)
+    private static String readUrl(URL url, HttpServletResponse response)
     {
         StringBuffer sb = new StringBuffer();
         try {
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
             conn.setRequestMethod("GET");
+            conn.setConnectTimeout(15 * 1000);
             BufferedReader br =  new BufferedReader(new InputStreamReader(conn.getInputStream()));
             String line = null;
             while ( (line = br.readLine() ) != null)
             {
                 sb.append(line);
             }
-        } catch (MalformedURLException mue)
-        {
+        }
+        catch (SocketTimeoutException ste){
+        	sb.append("504");
+        	ste.printStackTrace();
+        }
+        catch (MalformedURLException mue){
             mue.printStackTrace();
-        } catch (IOException ioe)
-        {
+        } 
+        catch (IOException ioe){
             ioe.printStackTrace();
-        } finally {
+        } 
+        finally {
 
         }
         return sb.toString();
     }
 
-    public static boolean deleteDir(File dir) {
+    private static boolean deleteDir(File dir) {
         if (dir.isDirectory()) {
             String[] children = dir.list();
             for (int i=0; i<children.length; i++) {
@@ -243,7 +279,7 @@ public class ServletGenerateODB extends HttpServlet {
         return dir.delete();
     }
 
-    public boolean renameFile(String from, String to) throws IOException{
+    private boolean renameFile(String from, String to) throws IOException{
         File file = new File(from);
 
         // File (or directory) with new name

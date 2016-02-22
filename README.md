@@ -29,10 +29,13 @@ http://localhost:8080/ODBGenerator/generateODB?apikey=6400711028fccfd416d7f0f783
 
 #### HTTP responses codes meaning
 
-| HTTP Response                     | Description                                   |
-|-----------------------------------|-----------------------------------------------|
-| __200 - OK__                    | Your browser should prompt to download the generated .odb file |
-| __405 - Method Not Allowed__    | You need to use GET method                      |
-| __412 - Precondition Failed__   | You need to supply all required parameters      |
-| __401 - Unauthorized__          | The supplied API Key is invalid or you do not have sufficient permission to retrieve this classroom associated data |
-| __404 - Not Found__             | ```classroom_id``` you specified does not exist |
+| HTTP Response                     | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| __200 - OK__                      | Browser prompt to download the generated .odb file |
+| __401 - Unauthorized__            | Supplied API Key is invalid                        |
+| __403 - Forbidden__               | Supplied API Key is valid but you do not have sufficient permission to retrieve this classroom associated data |
+| __404 - Not Found__               | ```classroom_id``` supplied does not exist         |
+| __405 - Method Not Allowed__      | You need to use GET method                         |
+| __412 - Precondition Failed__     | You need to supply all required parameters         |
+| __502 - Bad Gateway__             | API did not respond with a valid JSON string       |
+| __504 - Gateway Time-out__        | API did not respond within the time limit (15 sec) |
