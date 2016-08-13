@@ -28,7 +28,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 
 import org.hsqldb.jdbcDriver;
@@ -43,12 +45,22 @@ class Pupil {
     String name;
     String first_name;
     String birthday;
-    String level;
+    List<Level> levels;
+    
+    public String getBirthday(){
+    	Date date = javax.xml.bind.DatatypeConverter.parseDateTime(this.birthday).getTime();
+    	DateFormat formatter = new SimpleDateFormat("dd/MM/yyyy");
+    	return formatter.format(date);
+    }
 }
 
 class Classroom {
-    String error;
+	String code;
     List<Pupil> pupils;
+}
+
+class Level {
+    String title;
 }
 
 @SuppressWarnings("serial")
@@ -72,38 +84,34 @@ public class ServletGenerateODB extends HttpServlet {
 
         if(apikey == null || classroom_id == null){
         	//Some required parameters are missing
-            response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
+            response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED,"Vous devez spécifier les paramètres apikey et classroom_id");
             return;
         }
        
-        json = readUrl(new URL(apiUrl + "/classrooms/getJson/" + apikey + "/" + classroom_id),response);
+        json = readUrl(new URL(apiUrl + "/classrooms/view/" + classroom_id + ".json?api_key=" + apikey),response);
         
-    	if(json.equals("504")){
-        	response.sendError(HttpServletResponse.SC_GATEWAY_TIMEOUT);
-        	return;
-        }
-      	
+    	switch(json){
+	    	case "504":
+	    		response.sendError(HttpServletResponse.SC_GATEWAY_TIMEOUT);
+	        	return;
+	    	case "401":
+	    		response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+	        	return;
+	    	case "403":
+	    		response.sendError(HttpServletResponse.SC_FORBIDDEN);
+        		return;
+	    	case "404":
+	    		response.sendError(HttpServletResponse.SC_NOT_FOUND);
+        		return;
+	    		
+    	}
+        
+         	
         if(isJSONValid(json)){
         	
         	//Parsing our JSON to the Classroom class
             Gson gson = new Gson();
             Classroom classroom = gson.fromJson(json, Classroom.class);
-            
-            //If we have an error, let the user know (HTTP response code)
-            switch(classroom.error){
-            	case "INVALID_APIKEY":
-            		//Supplied API Key is invalid
-            		response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-            		return;
-            	case "UNAUTHORIZED":
-            		//API Key is correct but insufficient permissions
-            		response.sendError(HttpServletResponse.SC_FORBIDDEN);
-            		return;
-            	case "UNKNOWN_CLASSROOM":
-            		//Classroom does not exist for this classroom_id
-            		response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            		return;
-            }
 
             //Get servlet context (used to get path of Dynamic Web Project)
             ServletContext cntxt = this.getServletContext();
@@ -147,11 +155,11 @@ public class ServletGenerateODB extends HttpServlet {
                 	if(i == 1){
                 		//We update first line for first iteration
                 		statement = con.createStatement();
-                        statement.executeUpdate("UPDATE \"Eleves\" SET \"Code\" = '"+pupil.id+"', \"Nom\" = '"+pupil.name+"', \"Prénom\" = '"+pupil.first_name+"', \"naiss\" = '"+pupil.birthday+"', \"level\" = '"+pupil.level+"' WHERE \"ID\" = 1");
+                        statement.executeUpdate("UPDATE \"Eleves\" SET \"Code\" = '*00"+pupil.id+"*', \"Nom\" = '"+pupil.name+"', \"Prénom\" = '"+pupil.first_name+"', \"naiss\" = '"+pupil.getBirthday()+"', \"level\" = '"+pupil.levels.get(0).title+"' WHERE \"ID\" = 1");
                 	}else{
                 		//Adding the next records
                 		statement = con.createStatement();
-                        statement.executeUpdate("INSERT INTO \"Eleves\" VALUES ('"+i+"', '"+pupil.id+"', '"+pupil.name+"', '"+pupil.first_name+"', '"+pupil.birthday+"', '"+pupil.level+"')");
+                        statement.executeUpdate("INSERT INTO \"Eleves\" VALUES ('"+i+"', '*00"+pupil.id+"*', '"+pupil.name+"', '"+pupil.first_name+"', '"+pupil.getBirthday()+"', '"+pupil.levels.get(0).title+"')");
                 	}
                 	i++;
                 }
@@ -239,8 +247,9 @@ public class ServletGenerateODB extends HttpServlet {
     private static String readUrl(URL url, HttpServletResponse response)
     {
         StringBuffer sb = new StringBuffer();
+        HttpURLConnection conn = null;
         try {
-            HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            conn = (HttpURLConnection)url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(15 * 1000);
             BufferedReader br =  new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -258,6 +267,11 @@ public class ServletGenerateODB extends HttpServlet {
             mue.printStackTrace();
         } 
         catch (IOException ioe){
+        	try {
+				sb.append(Integer.toString(conn.getResponseCode()));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
             ioe.printStackTrace();
         } 
         finally {
