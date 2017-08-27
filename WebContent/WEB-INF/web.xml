@@ -5,7 +5,7 @@
         <servlet-class>Opencomp.ServletGenerateODB</servlet-class>
         <init-param>
 	        <param-name>apiUrl</param-name>
-	        <param-value>http://localhost</param-value>
+	        <param-value>https://my.opencomp.fr</param-value>
 	    </init-param>
     </servlet>
     <servlet-mapping>
